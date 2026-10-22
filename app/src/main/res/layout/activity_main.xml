@@ -11,6 +11,7 @@
 
     <org.cimbar.camerafilecopy.OpencvCameraView
         android:id="@+id/main_surface"
+        android:visibility="invisible"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -18,13 +19,37 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <org.cimbar.camerafilecopy.ModeSelToggle
-        android:id="@+id/mode_switch"
-        android:layout_width="48dp"
-        android:layout_height="54dp"
-        android:background="@android:drawable/divider_horizontal_textfield"
-        android:button="@drawable/modesel"
-        android:checked="false"
+    <LinearLayout
+        android:id="@+id/startup"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#101827"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/startup_message"
+            android:textColor="#EEF3FC"
+            android:textSize="22sp"
+            android:accessibilityLiveRegion="polite" />
+
+        <ProgressBar
+            android:id="@+id/startup_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="280dp"
+            android:layout_height="8dp"
+            android:layout_marginTop="24dp"
+            android:max="4000"
+            android:progress="0"
+            android:progressTint="#56B9FF"
+            android:contentDescription="@string/startup_message" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

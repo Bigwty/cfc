@@ -7,19 +7,19 @@ import org.opencv.core.Mat;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 
-import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.view.View;
+import android.widget.ProgressBar;
 import android.util.Log;
-import android.view.GestureDetector;
-import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.webkit.MimeTypeMap;
-import android.widget.CompoundButton;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
-import androidx.core.view.GestureDetectorCompat;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,13 +32,29 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
     private static final String TAG = "cfc::MainActivity";
     private static final int CREATE_FILE = 11;
 
-    private GestureDetectorCompat mDetector;
     private Toast introToast;
 
     private CameraBridgeViewBase mOpenCvCameraView;
-    private ModeSelToggle mModeSwitch;
-    private int modeVal = 0;
-    private int detectedMode = 68;
+    private final Handler startupHandler = new Handler(Looper.getMainLooper());
+    private long startupDeadline;
+    private boolean startupComplete;
+    private final Runnable startupTick = new Runnable() {
+        @Override
+        public void run() {
+            long remaining = Math.max(0, startupDeadline - SystemClock.elapsedRealtime());
+            ProgressBar progress = findViewById(R.id.startup_progress);
+            progress.setProgress((int) (4000 - remaining));
+            if (remaining > 0) {
+                startupHandler.postDelayed(this, Math.min(40, remaining));
+                return;
+            }
+            startupComplete = true;
+            findViewById(R.id.startup).setVisibility(View.GONE);
+            mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
+            mOpenCvCameraView.enableView();
+            if (introToast != null) introToast.show();
+        }
+    };
     private String dataPath;
     private String activePath;
 
@@ -58,7 +74,7 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
             System.loadLibrary("cfc-cpp");
         } else {
             Log.e(TAG, "OpenCV initialization failed!");
-            (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show();
+            (Toast.makeText(this, getString(R.string.camera_init_failed), Toast.LENGTH_LONG)).show();
             return;
         }
         //! [ocv_loader_init]
@@ -74,40 +90,27 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         setContentView(R.layout.activity_main);
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.main_surface);
-        mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
+        mOpenCvCameraView.setVisibility(SurfaceView.INVISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
 
-        // set up mode toggle
-        mModeSwitch = (ModeSelToggle) findViewById(R.id.mode_switch);
-        mModeSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked) {
-                    modeVal = detectedMode;
-                } else {
-                    modeVal = 0;
-                }
-            }
-        });
+        startupDeadline = savedInstanceState == null
+                ? SystemClock.elapsedRealtime() + 4000
+                : savedInstanceState.getLong("startupDeadline", SystemClock.elapsedRealtime() + 4000);
 
-        // Set up the swipe gestures
-        mDetector = new GestureDetectorCompat(this, new FlingGestureListener());
-
-        // and the hint toast
-        introToast = Toast.makeText(this, "↕ Swipe to encode data! Or use cimbar.org :)",  Toast.LENGTH_LONG);
+        introToast = Toast.makeText(this, R.string.scan_hint, Toast.LENGTH_LONG);
     }
 
     @Override
-    public void onStart() {
-        super.onStart();
-        introToast.show();
-        // reset autodetect
-        mModeSwitch.setChecked(false);
-        modeVal = 0;
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putLong("startupDeadline", startupDeadline);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
     public void onPause()
     {
+        startupHandler.removeCallbacks(startupTick);
+        if (introToast != null) introToast.cancel();
         shutdownJNI();
         super.onPause();
         if (mOpenCvCameraView != null)
@@ -118,17 +121,20 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
     public void onResume()
     {
         super.onResume();
-        if (mOpenCvCameraView != null)
-            mOpenCvCameraView.enableView();
+        if (mOpenCvCameraView != null) {
+            if (startupComplete) mOpenCvCameraView.enableView();
+            else startupHandler.post(startupTick);
+        }
     }
 
     @Override
     protected List<? extends CameraBridgeViewBase> getCameraViewList() {
-        return Collections.singletonList(mOpenCvCameraView);
+        return mOpenCvCameraView == null ? Collections.emptyList() : Collections.singletonList(mOpenCvCameraView);
     }
 
     @Override
     public void onDestroy() {
+        startupHandler.removeCallbacks(startupTick);
         shutdownJNI();
         super.onDestroy();
         if (mOpenCvCameraView != null)
@@ -149,32 +155,10 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         Mat mat = frame.rgba();
 
         // native call to process current camera frame
-        String res = processImageJNI(mat.getNativeObjAddr(), this.dataPath, this.modeVal);
+        String res = processImageJNI(mat.getNativeObjAddr(), this.dataPath);
 
         // res will contain a file path if we completed a transfer. Ask the user where to save it
-        if (res.startsWith("/")) {
-            if (res.length() == 2 && res.charAt(1) == '4') {
-                detectedMode = 4;
-            }
-            else if (res.length() == 3 && res.charAt(1) == '6' && res.charAt(2) == '6') {
-                detectedMode = 66;
-            }
-            else if (res.length() == 3 && res.charAt(1) == '6' && res.charAt(2) == '7') {
-                detectedMode = 67;
-            }
-            else {
-                detectedMode = 68;
-            }
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    mModeSwitch.setChecked(true);
-                    mModeSwitch.setModeVal(detectedMode);
-                }
-            });
-
-        }
-        else if (!res.isEmpty()) {
+        if (!res.isEmpty()) {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType(getMimeType(res));
@@ -221,8 +205,10 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
                     ostream.write(buf, 0, length);
                 }
                 ostream.flush();
+                Toast.makeText(this, R.string.file_saved, Toast.LENGTH_LONG).show();
             } catch (Exception e) {
                 Log.e(TAG, "failed to write file " + e.toString());
+                Toast.makeText(this, R.string.file_save_failed, Toast.LENGTH_LONG).show();
             } finally {
                 try {
                     new File(this.activePath).delete();
@@ -232,41 +218,7 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         }
     }
 
-    private native String processImageJNI(long mat, String path, int modeInt);
+    private native String processImageJNI(long mat, String path);
     private native void shutdownJNI();
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event){
-        if (this.mDetector.onTouchEvent(event)) {
-            return true;
-        }
-        return super.onTouchEvent(event);
-    }
-    @SuppressLint("ClickableViewAccessibility")
-    class FlingGestureListener extends GestureDetector.SimpleOnGestureListener {
-        private static final String TAG = "Gestures";
-
-        // We only want fling gestures to trigger the view transitions, not scrolling.
-        @Override
-        public boolean onFling(MotionEvent event1, MotionEvent event2,
-                               float velocityX, float velocityY) {
-            final int THRESHOLD = 100;
-            final int VEL_THRESHOLD = 100;
-
-            if (Math.abs(velocityY) < VEL_THRESHOLD)
-                return false;
-            if (Math.abs(event1.getY() - event2.getY()) < THRESHOLD)
-                return false;
-            if (mOpenCvCameraView != null)
-                mOpenCvCameraView.disableView();
-            if (introToast != null)
-                introToast.cancel();
-
-            Intent intent = new Intent(MainActivity.this, WebViewActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            return true;
-        }
-    }
 
 }

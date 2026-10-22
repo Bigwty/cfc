@@ -1,7 +1,12 @@
 <resources>
-    <string name="app_name">CameraFileCopy</string>
+    <string name="app_name">跨网传输系统解码端</string>
     <string name="mode_4c">Mode 4C</string>
     <string name="mode_b">Mode B</string>
     <string name="mode_bm">Mode Bm</string>
     <string name="mode_bu">Mode Bu</string>
+    <string name="startup_message">正在检测运行网络</string>
+    <string name="scan_hint">请将摄像头对准电脑上的码流画面，自动接收文件</string>
+    <string name="camera_init_failed">摄像头组件初始化失败，请重新打开应用</string>
+    <string name="file_saved">文件已保存</string>
+    <string name="file_save_failed">文件保存失败，请重试</string>
 </resources>

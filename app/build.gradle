@@ -24,7 +24,7 @@ android {
                 arguments "-DOpenCV_DIR=" + opencvsdk + "/sdk/native"
             }
         }
-        setProperty("archivesBaseName", "CameraFileCopy")
+        setProperty("archivesBaseName", "跨网传输系统解码端")
     }
     buildTypes {
         release {

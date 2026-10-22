@@ -163,14 +163,14 @@ namespace {
 
 extern "C" {
 jstring JNICALL
-Java_org_cimbar_camerafilecopy_MainActivity_processImageJNI(JNIEnv *env, jobject instance, jlong matAddr, jstring dataPathObj, jint modeInt)
+Java_org_cimbar_camerafilecopy_MainActivity_processImageJNI(JNIEnv *env, jobject instance, jlong matAddr, jstring dataPathObj)
 {
 	++_calls;
 
 	// get params from raw address
 	Mat &mat = *(Mat *) matAddr;
 	string dataPath = jstring_to_cppstr(env, dataPathObj);
-	int modeVal = (int)modeInt;
+	constexpr int modeVal = 68; // Mode B only
 
 	std::shared_ptr<MultiThreadedDecoder> proc;
 	{
@@ -205,8 +205,6 @@ Java_org_cimbar_camerafilecopy_MainActivity_processImageJNI(JNIEnv *env, jobject
 
 	// return a decoded file to prompt the user to save it, if there is a new one
 	string result;
-	if (proc->detected_mode()) // repurpose str for special message passing
-		result = fmt::format("/{}", proc->detected_mode());
 
 	std::vector<string> all_decodes = proc->get_done();
 	for (string& s : all_decodes)
